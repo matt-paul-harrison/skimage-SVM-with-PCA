@@ -1,0 +1,188 @@
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
+from sklearn.svm import SVC
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+from sklearn.decomposition import PCA
+import sklearn
+import numpy as np
+import tensorflow as tf
+from skimage import io
+import matplotlib.pyplot as plt
+%matplotlib inline
+import os
+import skimage
+import skimage.io as io
+from skimage import transform
+import time
+def get_category(category,images,labels,categories=categories):
+    """Specific helper function to return all images of a specified category"""
+    cat_index=categories.index(category)
+    output=[]
+    for i in range(len(labels)):
+        if labels[i]==cat_index:
+            output.append(images[i])
+    return output
+def load_data(data_directory,label):
+    """Helper function to load images from the specified directory and generate a corresponding label"""
+    #directories = [d for d in os.listdir(data_directory) if os.path.isdir(os.path.join(data_directory, d))]
+    labels = []
+    images = []
+    for image in os.listdir(data_directory):
+        try:
+            images.append(skimage.io.imread(data_directory+"/"+image))
+            labels.append(label)
+        except FileNotFoundError:
+            print("not found")
+        except OSError:
+            print("corrupted")
+
+    return images, labels
+def extract_true_images(images,labels):
+    """Many of the images used were corrupt or encountered an error when pulling from the web. This function removes the worst offenders"""
+    photo_unavailable_image=np.load("photo_unavailable_image.npy")
+    true_images=[]
+    true_labels=[]
+    for jj in range(len(images)):
+        truth=(images[jj]==photo_unavailable_image)
+        if type(truth)==np.ndarray:
+            truth=truth.all()
+        if truth:
+            print(jj)
+        else:
+            true_images.append(images[jj])
+            true_labels.append(labels[jj])
+    return true_images,true_labels
+def get_batch(features,labels,batch_size):
+    """This function is used for the neural network code, and is not used here"""
+    feature_length=len(features)
+    output_features=[]
+    output_labels=[]
+    for i in range(batch_size):
+        element_id=np.random.randint(0,feature_length)
+        output_features.append(features[element_id])
+        output_labels.append(labels[element_id])
+    return output_features,output_labels
+
+def downsize_images(new_shape,images,output_progress=True):
+    """Resizes the input data to the desired resolution"""
+    output=[]
+    N=len(images)
+    for i in range(N):
+        image=skimage.color.rgb2gray(images[i])
+        image=skimage.transform.resize(image,new_shape)
+        output.append(image)
+        if i%100=0:
+            print("Processed %d out of %d images", [i,N])
+    return output
+
+#Here we load the data with corresponding labels.  This data is far from the best, and we make the approximation that pets = dogs
+images,labels=[],[]
+data_directory="pets"
+images_0, labels_0=load_data(data_directory,0)
+images_0, labels_0=extract_true_images(images_0, labels_0)
+images+=images_0
+labels+=labels_0
+data_directory="hotdog"
+images_1, labels_1=load_data(data_directory,1)
+images_1, labels_1=extract_true_images(images_1, labels_1)
+images+=images_1
+labels+=labels_1
+data_directory="chili-dog"
+images_1, labels_1=load_data(data_directory,1)
+images_1, labels_1=extract_true_images(images_1, labels_1)
+images+=images_1
+labels+=labels_1
+data_directory="frankfurter"
+images_1, labels_1=load_data(data_directory,1)
+images_1, labels_1=extract_true_images(images_1, labels_1)
+images+=images_1
+labels+=labels_1
+
+data_directory="furniture"
+images_2, labels_2=load_data(data_directory,2)
+images_2, labels_2=extract_true_images(images_2, labels_2)
+images+=images_2
+labels+=labels_2
+data_directory="people"
+images_2, labels_2=load_data(data_directory,2)
+images_2, labels_2=extract_true_images(images_2, labels_2)
+images+=images_2
+labels+=labels_2
+
+#resize the images
+images=downsize_images([56,56],images)
+
+#map integer keys onto names of the categories
+categories=['dog','hotdog','not a dog']
+
+#perform the train/test split
+train_images,test_images,train_labels, test_labels=train_test_split(images,labels, test_size=0.15, random_state=42)
+
+
+#################
+n_samples,h,w=len(train_images),56,56
+n_features=h*w
+
+#For the PCA, we throw away relative pixel information, so the inputs are h*w length vectors
+train_images_f=[np.ndarray.flatten(image) for image in train_images]
+test_images_f=[np.ndarray.flatten(image) for image in test_images]
+n_classes=len(categories)
+
+#Here we select the number of components to retain
+n_components = 50
+t0 = time.time()
+
+#This next line performs the PCA.  The option "whiten" ensures that our output space is isotropic, which is important for SVM
+pca = sklearn.decomposition.PCA(n_components=n_components, svd_solver='randomized',whiten=True).fit(train_images_f)
+
+#The principle components, mapped back onto the original h x w pixel space
+eigenfeatures = pca.components_.reshape((n_components, h, w))
+
+#Project inputs onto principle components
+compressed_train=pca.transform(train_images_f)
+compressed_test=pca.transform(test_images_f)
+
+#Instantiate the SVC and train on the inputs
+clf = SVC(kernel='rbf', class_weight='balanced')
+clf = clf.fit(train_images_f, train_labels)
+print(time.time()-t0)
+#The call to clf.fit took 90 seconds on my macbook air.
+
+#####################
+## These two functions are taken from sklearn documentation, and are not my original work
+def title(y_pred, y_test, target_names, i):
+    pred_name = target_names[y_pred[i]].rsplit(' ', 1)[-1]
+    true_name = target_names[test_labels[i]].rsplit(' ', 1)[-1]
+    return 'predicted: %s\ntrue:      %s' % (pred_name, true_name)
+def plot_gallery(images, titles, h, w, n_row=3, n_col=4):
+    """Helper function to plot a gallery of portraits"""
+    plt.figure(figsize=(1.8 * n_col, 2.4 * n_row))
+    plt.subplots_adjust(bottom=0, left=.01, right=.99, top=.90, hspace=.35)
+    for i in range(n_row * n_col):
+        plt.subplot(n_row, n_col, i + 1)
+        plt.imshow(images[i].reshape((h, w)), cmap=plt.cm.gray)
+        plt.title(titles[i], size=12)
+        plt.xticks(())
+        plt.yticks(())
+
+#Feed forward the test set
+y_pred=clf.predict(test_images_f)
+
+#Get precision report on the classifier's performance
+print(classification_report(test_labels, y_pred, target_names=categories))
+print(confusion_matrix(test_labels, y_pred, labels=range(n_classes)))
+prediction_titles = [title(y_pred, test_labels, categories, i) for i in range(y_pred.shape[0])]
+
+#Plot a random contiguous sample of the test set
+seed=np.random.randint(0,len(test_images)-12)
+plot_gallery(test_images[seed:], prediction_titles[seed:], h, w)
+
+#Look at the principle components in the h x w pixel space
+eigenfeature_titles = ["eigenfeature %d" % i for i in range(eigenfeatures.shape[0])]
+plot_gallery(eigenfeatures, eigenfeature_titles, h, w)
+
+##For these parameters, this classifier scores 53% accuracy overall, which is not good.  
+#The well trained CNN (up in another repository) was able to get 76%
+#For the case of these images, throwing out the spatial information of the pixels is simple too wasteful
