@@ -147,7 +147,7 @@ compressed_test=pca.transform(test_images_f)
 #Instantiate the SVC and train on the inputs
 clf = SVC(kernel='rbf', class_weight='balanced')
 clf = clf.fit(train_images_f, train_labels)
-print(time.time()-t0)
+print("time taken: "+str(time.time()-t0))
 #The call to clf.fit took 90 seconds on my macbook air.
 
 #####################
