@@ -186,3 +186,9 @@ plot_gallery(eigenfeatures, eigenfeature_titles, h, w)
 ##For these parameters, this classifier scores 53% accuracy overall, which is not good.  
 #The well trained CNN (up in another repository) was able to get 76%
 #For the case of these images, throwing out the spatial information of the pixels is simple too wasteful
+
+#Here we save the svm and pca info for reuse
+import pickle
+from sklearn.externals import joblib
+joblib.dump(clf, 'clf.pkl') 
+joblib.dump(pca, 'pca.pkl') 
